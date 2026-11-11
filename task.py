@@ -68,13 +68,17 @@ def segments_properly_intersect(a1: Point, a2: Point,
     return False
 
 
+def _on_segment(a: Point, b: Point, p: Point) -> bool:
+    """Лежит ли точка p на отрезке a-b (коллинеарность уже проверена отдельно)."""
+    return (min(a[0], b[0]) - 1e-9 <= p[0] <= max(a[0], b[0]) + 1e-9 and
+            min(a[1], b[1]) - 1e-9 <= p[1] <= max(a[1], b[1]) + 1e-9)
+
 def diagonal_inside(poly: List[Point], i: int, j: int) -> bool:
     """
-    Лежит ли диагональ poly[i]-poly[j] строго внутри полигона?
-    Условия:
-      1) Не пересекает ни одно ребро.
-      2) Середина диагонали лежит внутри полигона.
-      3) Диагональ лежит внутри углов в обеих вершинах.
+      (A) ни одна другая вершина не лежит на диагонали;
+      (B) диагональ не пересекает рёбра (кроме инцидентных концам);
+      (C) середина диагонали внутри полигона;
+      (D) диагональ попадает в правильный угол в обеих вершинах.
     """
     n = len(poly)
     if abs(i - j) == 1 or abs(i - j) == n - 1:
@@ -82,50 +86,42 @@ def diagonal_inside(poly: List[Point], i: int, j: int) -> bool:
 
     vi, vj = poly[i], poly[j]
 
-    # Условие 1: не пересекает рёбра
+    # (A) Диагональ не проходит сквозь другую вершину
+    for m in range(n):
+        if m == i or m == j:
+            continue
+        if abs(cross(vi, vj, poly[m])) < 1e-9 and _on_segment(vi, vj, poly[m]):
+            return False
+
+    # (B) не пересекает рёбра (строгое пересечение)
     for k in range(n):
         a = poly[k]
         b = poly[(k + 1) % n]
-        # Пропускаем рёбра, инцидентные vi или vj
         if k == i or k == j or (k + 1) % n == i or (k + 1) % n == j:
             continue
         if segments_properly_intersect(vi, vj, a, b):
             return False
 
-    # Условие 2: середина внутри
+    # (C) середина внутри
     mid = ((vi[0] + vj[0]) / 2.0, (vi[1] + vj[1]) / 2.0)
     if not point_in_polygon(mid, poly):
         return False
 
-    # Условие 3: диагональ внутри угла в вершине i
-    # (должна быть между ребрами (i-1,i) и (i,i+1))
-    prev_i = poly[(i - 1) % n]
-    next_i = poly[(i + 1) % n]
+    # угловые проверки в i и j (как было)
+    prev_i, next_i = poly[(i - 1) % n], poly[(i + 1) % n]
     if is_reflex(poly, i):
-        # Для рефлексной вершины: vj должен быть СНАРУЖИ угла
-        # cross(prev, vi, vj) и cross(vi, next, vj) должны иметь разные знаки
-        c1 = cross(prev_i, vi, vj)
-        c2 = cross(vi, next_i, vj)
-        if c1 > 0 and c2 > 0:
+        if cross(prev_i, vi, vj) > 0 and cross(vi, next_i, vj) > 0:
             return False
     else:
-        # Для выпуклой: vj должен быть ВНУТРИ угла
-        c1 = cross(prev_i, vi, vj)
-        c2 = cross(vi, next_i, vj)
-        if c1 <= 0 or c2 <= 0:
+        if cross(prev_i, vi, vj) <= 0 or cross(vi, next_i, vj) <= 0:
             return False
 
-    prev_j = poly[(j - 1) % n]
-    next_j = poly[(j + 1) % n]
+    prev_j, next_j = poly[(j - 1) % n], poly[(j + 1) % n]
     if is_reflex(poly, j):
-        c1 = cross(prev_j, vj, vi)
-        c2 = cross(vj, next_j, vi)
-        if c1 > 0 and c2 > 0:
+        if cross(prev_j, vj, vi) > 0 and cross(vj, next_j, vi) > 0:
             return False
     else:
-        c1 = cross(prev_j, vj, vi)
-        c2 = cross(vj, next_j, vi)
-        if c1 <= 0 or c2 <= 0:
+        if cross(prev_j, vj, vi) <= 0 or cross(vj, next_j, vi) <= 0:
             return False
 
     return True
@@ -431,8 +427,6 @@ def visualize_triangulation(poly: List[Point], title: str = "Триангуля�
     plt.suptitle(title, fontsize=14, fontweight='bold')
     plt.tight_layout()
     plt.show()
-
-# Тестовые примеры
 
 if __name__ == "__main__":
     # Пример 1: невыпуклый полигон (L-образный)
