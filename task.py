@@ -292,7 +292,7 @@ def triangulate_intruding(poly: List[Point],
         new_poly = poly[:edge_idx + 1] + [new_point] + poly[edge_idx + 1:]
         # Теперь ищем диагональ от reflex_idx к new_point
         # (new_point находится на индексе edge_idx + 1)
-        new_reflex_idx = reflex_idx
+        new_reflex_idx = reflex_idx if reflex_idx <= edge_idx else reflex_idx + 1
         new_visible_idx = edge_idx + 1
 
         i, j = new_reflex_idx, new_visible_idx
@@ -431,6 +431,8 @@ def visualize_triangulation(poly: List[Point], title: str = "Триангуля�
     plt.suptitle(title, fontsize=14, fontweight='bold')
     plt.tight_layout()
     plt.show()
+
+# Тестовые примеры
 
 if __name__ == "__main__":
     # Пример 1: невыпуклый полигон (L-образный)
