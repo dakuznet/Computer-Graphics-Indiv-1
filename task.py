@@ -250,10 +250,10 @@ def triangulate_intruding(poly: List[Point],
         # Разбиваем на два полигона
         if i < j:
             poly1 = poly[i:j + 1]
-            poly2 = poly[j:] + poly[1:i + 1]
+            poly2 = poly[j:] + poly[:i + 1]
         else:
             poly1 = poly[j:i + 1]
-            poly2 = poly[i:] + poly[1:j + 1]
+            poly2 = poly[i:] + poly[:j + 1]
 
         if steps is not None:
             steps.append({
@@ -300,10 +300,10 @@ def triangulate_intruding(poly: List[Point],
 
         if i < j:
             poly1 = new_poly[i:j + 1]
-            poly2 = new_poly[j:] + new_poly[1:i + 1]
+            poly2 = new_poly[j:] + new_poly[:i + 1]
         else:
             poly1 = new_poly[j:i + 1]
-            poly2 = new_poly[i:] + new_poly[1:j + 1]
+            poly2 = new_poly[i:] + new_poly[:j + 1]
 
         if steps is not None:
             steps.append({
@@ -431,11 +431,6 @@ def visualize_triangulation(poly: List[Point], title: str = "Триангуля�
     plt.suptitle(title, fontsize=14, fontweight='bold')
     plt.tight_layout()
     plt.show()
-
-
-# ═══════════════════════════════════════════════════════════
-# Тестовые примеры
-# ═══════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
     # Пример 1: невыпуклый полигон (L-образный)
