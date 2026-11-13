@@ -7,7 +7,9 @@ from typing import List, Tuple, Optional
 Point = Tuple[float, float]
 
 
+# ═══════════════════════════════════════════════════════════
 # Геометрические предикаты
+# ═══════════════════════════════════════════════════════════
 
 def cross(o: Point, a: Point, b: Point) -> float:
     """Векторное произведение OA × OB. Знак показывает ориентацию."""
@@ -29,7 +31,7 @@ def orient_ccw(poly: List[Point]) -> List[Point]:
 
 def is_reflex(poly: List[Point], i: int) -> bool:
     """
-    Является ли вершина i рефлексной (внутренний угол > 180°)
+    Является ли вершина i рефлексной.
     """
     n = len(poly)
     prev_p = poly[(i - 1) % n]
@@ -69,31 +71,43 @@ def segments_properly_intersect(a1: Point, a2: Point,
 
 
 def _on_segment(a: Point, b: Point, p: Point) -> bool:
-    """Лежит ли точка p на отрезке a-b (коллинеарность уже проверена отдельно)."""
+    """Лежит ли точка p на отрезке a-b."""
     return (min(a[0], b[0]) - 1e-9 <= p[0] <= max(a[0], b[0]) + 1e-9 and
             min(a[1], b[1]) - 1e-9 <= p[1] <= max(a[1], b[1]) + 1e-9)
 
+
+def _point_in_triangle_strict(p: Point, a: Point, b: Point, c: Point) -> bool:
+    """Строго внутри треугольника abc."""
+    d1 = cross(a, b, p)
+    d2 = cross(b, c, p)
+    d3 = cross(c, a, p)
+    has_neg = (d1 < -1e-9) or (d2 < -1e-9) or (d3 < -1e-9)
+    has_pos = (d1 >  1e-9) or (d2 >  1e-9) or (d3 >  1e-9)
+    return not (has_neg and has_pos)
+
+
 def diagonal_inside(poly: List[Point], i: int, j: int) -> bool:
     """
-      (A) ни одна другая вершина не лежит на диагонали;
-      (B) диагональ не пересекает рёбра (кроме инцидентных концам);
-      (C) середина диагонали внутри полигона;
-      (D) диагональ попадает в правильный угол в обеих вершинах.
+    Лежит ли диагональ poly[i]-poly[j] строго внутри полигона.
+    (A) ни одна другая вершина не лежит на диагонали;
+    (B) диагональ не пересекает рёбра (кроме инцидентных концам);
+    (C) середина диагонали внутри полигона;
+    (D) диагональ попадает во внутренний угол в обеих вершинах.
     """
     n = len(poly)
     if abs(i - j) == 1 or abs(i - j) == n - 1:
-        return False  # это ребро, не диагональ
+        return False
 
     vi, vj = poly[i], poly[j]
 
-    # (A) Диагональ не проходит сквозь другую вершину
+    # (A)
     for m in range(n):
         if m == i or m == j:
             continue
         if abs(cross(vi, vj, poly[m])) < 1e-9 and _on_segment(vi, vj, poly[m]):
             return False
 
-    # (B) не пересекает рёбра (строгое пересечение)
+    # (B)
     for k in range(n):
         a = poly[k]
         b = poly[(k + 1) % n]
@@ -102,32 +116,58 @@ def diagonal_inside(poly: List[Point], i: int, j: int) -> bool:
         if segments_properly_intersect(vi, vj, a, b):
             return False
 
-    # (C) середина внутри
+    # (C)
     mid = ((vi[0] + vj[0]) / 2.0, (vi[1] + vj[1]) / 2.0)
     if not point_in_polygon(mid, poly):
         return False
 
-    # угловые проверки в i и j (как было)
-    prev_i, next_i = poly[(i - 1) % n], poly[(i + 1) % n]
-    if is_reflex(poly, i):
-        if cross(prev_i, vi, vj) > 0 and cross(vi, next_i, vj) > 0:
-            return False
-    else:
-        if cross(prev_i, vi, vj) <= 0 or cross(vi, next_i, vj) <= 0:
-            return False
-
-    prev_j, next_j = poly[(j - 1) % n], poly[(j + 1) % n]
-    if is_reflex(poly, j):
-        if cross(prev_j, vj, vi) > 0 and cross(vj, next_j, vi) > 0:
-            return False
-    else:
-        if cross(prev_j, vj, vi) <= 0 or cross(vj, next_j, vi) <= 0:
-            return False
+    # (D)
+    for a, b in ((i, j), (j, i)):
+        va, vb = poly[a], poly[b]
+        prev_a = poly[(a - 1) % n]
+        next_a = poly[(a + 1) % n]
+        c_prev = cross(va, prev_a, vb)
+        c_next = cross(va, next_a, vb)
+        if is_reflex(poly, a):
+            if c_prev > 0 and c_next < 0:
+                return False
+        else:
+            if c_next <= 0 or c_prev >= 0:
+                return False
 
     return True
 
 
+def find_valid_ear(poly: List[Point]
+                   ) -> Optional[Tuple[Tuple[Point, Point, Point], List[Point]]]:
+    """
+    Ищет валидное ухо: тройка подряд идущих вершин (a,b,c),
+    у которой хорда a-c — внутренняя диагональ, и внутри abc нет других вершин.
+    """
+    n = len(poly)
+    for k in range(n):
+        a = poly[k]
+        b = poly[(k + 1) % n]
+        c = poly[(k + 2) % n]
+        if not diagonal_inside(poly, k, (k + 2) % n):
+            continue
+        ok = True
+        for m in range(n):
+            if m == k or m == (k + 1) % n or m == (k + 2) % n:
+                continue
+            if _point_in_triangle_strict(poly[m], a, b, c):
+                ok = False
+                break
+        if ok:
+            skip = (k + 1) % n
+            rest = [poly[m] for m in range(n) if m != skip]
+            return ((a, b, c), rest)
+    return None
+
+
+# ═══════════════════════════════════════════════════════════
 # Поиск вторгающейся вершины
+# ═══════════════════════════════════════════════════════════
 
 def find_intruding_pair(poly: List[Point]) -> Optional[Tuple[int, int]]:
     """
@@ -158,11 +198,9 @@ def find_intrusion_on_edge(poly: List[Point], reflex_idx: int
     prev_p = poly[(reflex_idx - 1) % n]
     next_p = poly[(reflex_idx + 1) % n]
 
-    # Направления двух рёбер из R
     v1 = (prev_p[0] - R[0], prev_p[1] - R[1])
     v2 = (next_p[0] - R[0], next_p[1] - R[1])
 
-    # Нормализуем
     len1 = np.hypot(*v1)
     len2 = np.hypot(*v2)
     if len1 < 1e-12 or len2 < 1e-12:
@@ -170,14 +208,12 @@ def find_intrusion_on_edge(poly: List[Point], reflex_idx: int
     u1 = (v1[0] / len1, v1[1] / len1)
     u2 = (v2[0] / len2, v2[1] / len2)
 
-    # Биссектриса внутреннего угла (направление "вторжения")
     bis = (u1[0] + u2[0], u1[1] + u2[1])
     blen = np.hypot(*bis)
     if blen < 1e-12:
         return None
     bis = (bis[0] / blen, bis[1] / blen)
 
-    # Луч: R + t * bis, t > 0
     best_t = float('inf')
     best_edge = -1
     best_point = None
@@ -185,17 +221,14 @@ def find_intrusion_on_edge(poly: List[Point], reflex_idx: int
     for k in range(n):
         a = poly[k]
         b = poly[(k + 1) % n]
-        # Пропускаем рёбра, инцидентные R
         if k == reflex_idx or (k + 1) % n == reflex_idx:
             continue
 
-        # Пересечение луча с отрезком a-b
-        # R + t*bis = a + s*(b-a)
         dx = b[0] - a[0]
         dy = b[1] - a[1]
         denom = bis[0] * dy - bis[1] * dx
         if abs(denom) < 1e-12:
-            continue  # параллельны
+            continue
         rx = a[0] - R[0]
         ry = a[1] - R[1]
         t = (rx * dy - ry * dx) / denom
@@ -210,7 +243,9 @@ def find_intrusion_on_edge(poly: List[Point], reflex_idx: int
     return None
 
 
+# ═══════════════════════════════════════════════════════════
 # Основной алгоритм триангуляции
+# ═══════════════════════════════════════════════════════════
 
 def triangulate_intruding(poly: List[Point],
                           steps: Optional[list] = None
@@ -243,7 +278,6 @@ def triangulate_intruding(poly: List[Point],
         i, j = pair
         vi, vj = poly[i], poly[j]
 
-        # Разбиваем на два полигона
         if i < j:
             poly1 = poly[i:j + 1]
             poly2 = poly[j:] + poly[:i + 1]
@@ -273,21 +307,24 @@ def triangulate_intruding(poly: List[Point],
             break
 
     if reflex_idx == -1:
-        # Полигон выпуклый — берём любое "ухо"
+        # Полигон выпуклый — ищем валидное ухо (гарантированно существует)
+        ear_result = find_valid_ear(poly)
+        if ear_result is not None:
+            tri, rest = ear_result
+            if steps is not None:
+                steps.append({'type': 'convex_ear', 'poly': poly[:], 'ear': tri})
+            return [tri] + triangulate_intruding(rest, steps)
         tri = (poly[0], poly[1], poly[2])
         rest = [poly[0], poly[2]] + poly[3:]
         if steps is not None:
-            steps.append({'type': 'convex_ear', 'poly': poly[:], 'ear': tri})
+            steps.append({'type': 'fallback_ear', 'poly': poly[:], 'ear': tri})
         return [tri] + triangulate_intruding(rest, steps)
 
     intrusion = find_intrusion_on_edge(poly, reflex_idx)
 
     if intrusion is not None:
         edge_idx, new_point = intrusion
-        # Вставляем новую вершину в ребро edge_idx
         new_poly = poly[:edge_idx + 1] + [new_point] + poly[edge_idx + 1:]
-        # Теперь ищем диагональ от reflex_idx к new_point
-        # (new_point находится на индексе edge_idx + 1)
         new_reflex_idx = reflex_idx if reflex_idx <= edge_idx else reflex_idx + 1
         new_visible_idx = edge_idx + 1
 
@@ -314,7 +351,14 @@ def triangulate_intruding(poly: List[Point],
         return (triangulate_intruding(poly1, steps) +
                 triangulate_intruding(poly2, steps))
 
-    # Фолбэк: если ничего не нашли — используем "ухо"
+    # Шаг 3: ищем валидное ухо
+    ear_result = find_valid_ear(poly)
+    if ear_result is not None:
+        tri, rest = ear_result
+        if steps is not None:
+            steps.append({'type': 'ear', 'poly': poly[:], 'ear': tri})
+        return [tri] + triangulate_intruding(rest, steps)
+
     tri = (poly[0], poly[1], poly[2])
     rest = [poly[0], poly[2]] + poly[3:]
     if steps is not None:
@@ -322,7 +366,9 @@ def triangulate_intruding(poly: List[Point],
     return [tri] + triangulate_intruding(rest, steps)
 
 
+# ═══════════════════════════════════════════════════════════
 # Визуализация
+# ═══════════════════════════════════════════════════════════
 
 def draw_poly(ax, poly, color='black', lw=2, alpha=1.0):
     """Нарисовать контур полигона."""
@@ -352,6 +398,7 @@ def visualize_triangulation(poly: List[Point], title: str = "Триангуля�
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4.5 * n_rows))
     axes = np.array(axes).flatten()
 
+    # Шаг 0: исходный полигон
     ax = axes[0]
     ax.set_title("Исходный полигон", fontsize=11)
     draw_poly(ax, poly)
@@ -389,7 +436,7 @@ def visualize_triangulation(poly: List[Point], title: str = "Триангуля�
             draw_poly(ax, step['poly2'], color='orange', lw=1.5, alpha=0.7)
             ax.legend(fontsize=7, loc='upper right')
 
-        elif step['type'] in ('base', 'convex_ear', 'fallback_ear'):
+        elif step['type'] in ('base', 'convex_ear', 'fallback_ear', 'ear'):
             if step['type'] == 'base':
                 draw_poly(ax, step['poly'], color='green')
                 draw_vertices(ax, step['poly'], color='green')
@@ -407,6 +454,7 @@ def visualize_triangulation(poly: List[Point], title: str = "Триангуля�
         ax.set_aspect('equal')
         ax.grid(True, alpha=0.3)
 
+    # Результат
     ax = axes[n_steps + 1]
     ax.set_title(f"Результат: {len(triangles)} треугольников", fontsize=11)
     colors = plt.cm.tab10(np.linspace(0, 1, max(len(triangles), 1)))
@@ -428,6 +476,11 @@ def visualize_triangulation(poly: List[Point], title: str = "Триангуля�
     plt.tight_layout()
     plt.show()
 
+
+# ═══════════════════════════════════════════════════════════
+# Тестовые примеры
+# ═══════════════════════════════════════════════════════════
+
 if __name__ == "__main__":
     # Пример 1: невыпуклый полигон (L-образный)
     poly_L = [(0, 0), (4, 0), (4, 2), (2, 2), (2, 4), (0, 4)]
@@ -439,11 +492,19 @@ if __name__ == "__main__":
     poly_star = [(r * np.cos(a), r * np.sin(a)) for a, r in zip(angles, radii)]
     visualize_triangulation(poly_star, "Пример 2: Звезда (5 лучей)")
 
-    # Пример 3: сложный невыпуклый полигон
+    # Пример 3: сложный невыпуклый полигон (П-образный)
     poly_complex = [(0, 0), (6, 0), (6, 2), (4, 2), (4, 4),
                     (6, 4), (6, 6), (0, 6), (0, 4), (2, 4), (2, 2), (0, 2)]
     visualize_triangulation(poly_complex, "Пример 3: Сложный полигон (П-образный)")
 
-    # Пример 4: выпуклый полигон (для сравнения)
+    # Пример 4: выпуклый полигон
     poly_convex = [(0, 0), (5, 0), (6, 3), (3, 5), (-1, 3)]
     visualize_triangulation(poly_convex, "Пример 4: Выпуклый полигон")
+
+    # Пример 5: квадратная спираль / буква G
+    poly_G = [
+        (0, 0), (10, 0), (10, 10), (5, 10),
+        (5, 5), (7, 5), (7, 7), (9, 7),
+        (9, 2), (3, 2), (3, 10), (0, 10),
+    ]
+    visualize_triangulation(poly_G, "Пример 5: Спираль / буква G")
